@@ -1,0 +1,25 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>BugBot</title>
+    <style>
+        .flex-center {
+            display: flex;
+            flex-direction: column; /* Stack elements vertically */
+            align-items: center;    /* Center horizontally */
+            justify-content: center; /* Center vertically if container has height */
+            text-align: center;      /* Centers text inside elements */
+        }
+    </style>
+</head>
+<body>
+<div class="flex-center">
+<img src="{% static 'tanker_bug.webp' %}" alt="Tanker bug" width="400">
+<h1>BUGBOT</h1>
+<p>Welcome to the BugBot interface!</p>
+</div>
+</body>
+</html>

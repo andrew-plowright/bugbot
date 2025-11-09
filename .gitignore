@@ -1,0 +1,6 @@
+**/tokens.db
+**/tokens.db-shm
+**/tokens.db-wal
+/.venv/
+/.env.dev
+/.idea/
