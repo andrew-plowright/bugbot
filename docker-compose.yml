@@ -1,35 +1,38 @@
 # DEVELOPMENT CONFIGURATION
 services:
+
+  bugdb:
+    container_name: bugdb
+    image: postgres:15-alpine
+    env_file:
+      - .env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+      - ./bugdb/initdb:/docker-entrypoint-initdb.d/
+
   bugweb:
     container_name: bugweb
-    build: .
-    image: bugbot:latest
+    build: ./bugweb
     volumes:
-      - .:/app
+      - ./bugweb:/app
     env_file:
-      - .env.dev
+      - .env
     ports:
       - 8000:8000
     depends_on:
       - bugdb
     command: ./entrypoint.sh
 
-  bot:
-    image: bugbot:latest
-    env_file: .env.dev
+  bugbot:
+    container_name: bugbot
+    volumes:
+      - ./bugbot:/app
+    build: ./bugbot
+    env_file:
+      - .env
     depends_on:
       - bugdb
-    command: python bugbot/bugbot.py
-
-  bugdb:
-    container_name: bugdb
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: bugdb
-    volumes:
-      - postgres_data:/var/lib/postgresql/data/
+    command: python bugbot.py
 
 volumes:
   postgres_data:

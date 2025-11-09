@@ -2,5 +2,5 @@
 **/tokens.db-shm
 **/tokens.db-wal
 /.venv/
-/.env.dev
+/.env
 /.idea/

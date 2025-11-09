@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 import twitchio
 import asyncio
-load_dotenv(dotenv_path=".env.dev")
+load_dotenv(dotenv_path=".env.scripts")
 
 """
 Retrieve IDs for the bot owner

@@ -1,0 +1,10 @@
+# Dev folder
+dev/
+
+
+# Optional: ignore Python cache
+__pycache__/
+*.pyc
+
+# Ignore other local files you don’t want in the image
+.env

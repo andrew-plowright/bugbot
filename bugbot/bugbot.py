@@ -1,14 +1,11 @@
 import asyncio
 import logging
 import random
-from typing import TYPE_CHECKING
 import os
-import asqlite
+import asyncpg
 import twitchio
 from twitchio import eventsub
 from twitchio.ext import commands
-if TYPE_CHECKING:
-    import sqlite3
 
 LOGGER: logging.Logger = logging.getLogger("Bot")
 
@@ -18,8 +15,16 @@ CLIENT_SECRET: str = os.getenv("TWITCH_CLIENT_SECRET")
 OWNER_ID: str = os.getenv("TWITCH_OWNER_ID")
 BOT_ID: str = os.getenv("TWITCH_BOT_ID")
 
+DB_USER: str = os.getenv("BUGBOT_DB_USER")
+DB_PASS: str = os.getenv("BUGBOT_DB_PASS")
+DB_NAME: str = os.getenv("POSTGRES_DB")
+DB_HOST: str = os.getenv("DB_HOST")
+DB_PORT: str = os.getenv("DB_PORT")
+
+
 class Bot(commands.AutoBot):
-    def __init__(self, *, token_database: asqlite.Pool, subs: list[eventsub.SubscriptionPayload]) -> None:
+    def __init__(self, *, token_database: asyncpg.Pool, subs: list[eventsub.SubscriptionPayload]):
+
         self.token_database = token_database
 
         super().__init__(
@@ -59,24 +64,23 @@ class Bot(commands.AutoBot):
         # Make sure to call super() as it will add the tokens interally and return us some data...
         resp: twitchio.authentication.ValidateTokenPayload = await super().add_token(token, refresh)
 
-        # Store our tokens in a simple SQLite Database when they are authorized...
         query = """
-        INSERT INTO tokens (user_id, token, refresh)
-        VALUES (?, ?, ?)
-        ON CONFLICT(user_id)
-        DO UPDATE SET
+        INSERT INTO bot.tokens (user_id, token, refresh)
+        VALUES ($1, $2, $3)
+        ON CONFLICT(user_id) DO UPDATE SET
             token = excluded.token,
             refresh = excluded.refresh;
         """
 
-        async with self.token_database.acquire() as connection:
-            await connection.execute(query, (resp.user_id, token, refresh))
+        async with self.token_database.acquire() as conn:
+            await conn.execute(query, resp.user_id, token, refresh)
 
-        LOGGER.info("Added token to the database for user: %s", resp.user_id)
+        LOGGER.info("Saved token for user: %s", resp.user_id)
         return resp
 
     async def event_ready(self) -> None:
         LOGGER.info("Successfully logged in as: %s", self.bot_id)
+
 
 
 class MyComponent(commands.Component):
@@ -158,40 +162,29 @@ class MyComponent(commands.Component):
         """
         await ctx.send("discord.gg/...")
 
-
-async def setup_database(db: asqlite.Pool) -> tuple[list[tuple[str, str]], list[eventsub.SubscriptionPayload]]:
+async def setup_postgres(pool: asyncpg.Pool) -> tuple[list[tuple[str, str, str]], list[eventsub.SubscriptionPayload]]:
     """
-    Setup SQLite database that stores tokens and subscriptions
-
-    :param db: An asynchronous connection pool for SQLite.
-    :return: tuple of 1) access token and refresh token pairs, 2) subscriptions
+    Setup Postgres table and fetch existing tokens
     """
+    async with pool.acquire() as conn:
+        # Create table
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS bot.tokens (
+                user_id TEXT PRIMARY KEY,
+                token TEXT NOT NULL,
+                refresh TEXT NOT NULL
+            )
+        """)
 
-    # Create our token table, if it doesn't exist..
-    # You should add the created files to .gitignore or potentially store them somewhere safer
-    # This is just for example purposes...
+        # Fetch all tokens
+        rows = await conn.fetch("SELECT user_id, token, refresh FROM bot.tokens")
 
-    async with db.acquire() as connection:
+    tokens: list[tuple[str, str, str]] = [(row["user_id"], row["token"], row["refresh"]) for row in rows]
+    subs: list[eventsub.SubscriptionPayload] = []
 
-        # Create table of tokens
-        query = """CREATE TABLE IF NOT EXISTS tokens(user_id TEXT PRIMARY KEY, token TEXT NOT NULL, refresh TEXT NOT NULL)"""
-        await connection.execute(query)
-
-        # Fetch any existing tokens...
-        rows: list[sqlite3.Row] = await connection.fetchall("""SELECT * from tokens""")
-
-        tokens: list[tuple[str, str]] = []
-        subs: list[eventsub.SubscriptionPayload] = []
-
-        for row in rows:
-            # Append list of tokens
-            tokens.append((row["token"], row["refresh"]))
-
-            # Append list of subscriptions (the bot's own subscription)
-            if row["user_id"] == BOT_ID:
-                continue
-            else:
-                subs.extend([eventsub.ChatMessageSubscription(broadcaster_user_id=row["user_id"], user_id=BOT_ID)])
+    for user_id, _, _ in tokens:
+        if user_id != BOT_ID:
+            subs.append(eventsub.ChatMessageSubscription(broadcaster_user_id=user_id, user_id=BOT_ID))
 
     return tokens, subs
 
@@ -202,12 +195,27 @@ def main() -> None:
     twitchio.utils.setup_logging(level=logging.INFO)
 
     async def runner() -> None:
-        async with asqlite.create_pool("tokens.db") as tdb:
-            tokens, subs = await setup_database(tdb)
+        # Connect to Postgres
+        pool = await asyncpg.create_pool(
+            host=DB_HOST,  # Service name in docker-compose
+            port=DB_PORT,
+            user=DB_USER,
+            password=DB_PASS,
+            database=DB_NAME,
+            min_size=1,
+            max_size=10
+        )
 
-            async with Bot(token_database=tdb, subs=subs) as bot:
-                for pair in tokens:
-                    await bot.add_token(*pair)
+        async with pool:
+            tokens, subs = await setup_postgres(pool)
+
+            async with Bot(token_database=pool, subs=subs) as bot:
+                # Add and validate tokens
+                for user_id, access_token, refresh_token in tokens:
+                    try:
+                        await bot.add_token(access_token, refresh_token)
+                    except Exception as e:
+                        LOGGER.warning("Failed to add token for %s: %s", user_id, e)
 
                 await bot.start(load_tokens=False)
 
