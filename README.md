@@ -1,6 +1,6 @@
 # bugbot
 
-![Tanker Bug](bugweb/bugweb/static/tanker_bug.webp)
+<img src="bugweb/bugweb/static/tanker_bug.webp" alt="Tanker Bug" width="400">
 
 Twitter chat bot
 
