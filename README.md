@@ -2,7 +2,7 @@
 
 <img src="bugweb/bugweb/static/tanker_bug.webp" alt="Tanker Bug" width="400">
 
-Twitter chat bot
+_Twitch chat bot that may actually be a super-intelligent space bug_
 
 ---
 
