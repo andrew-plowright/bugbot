@@ -1,5 +1,7 @@
 # bugbot
 
+![Tanker Bug](bugweb/bugweb/static/tanker_bug.webp)
+
 Twitter chat bot
 
 ---
